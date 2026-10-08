@@ -43,12 +43,42 @@ int load_orders(FILE *in, struct order_record records[], size_t capacity, struct
 		   - compute total_price
 		   - update longest_name, grand_total, and max_total
 		*/
-		snprintf(records[count].name, sizeof(records[count].name), "%s", line);
-		snprintf(records[count].category, sizeof(records[count].category), "unknown");
-		records[count].quantity = 0;
-		records[count].unit_price = 0;
-		records[count].total_price = 0;
-		count++;
+		{
+			char name[LAB_MAX_NAME_LEN];
+			char category[LAB_MAX_CATEGORY_LEN];
+			int quantity;
+			int unit_price;
+
+			if (sscanf(line, "%31[^|]|%d|%d|%15[^\n]",
+			           name, &quantity, &unit_price, category) != 4) {
+				return -1;
+			}
+
+			snprintf(records[count].name, sizeof(records[count].name), "%.31s", line);
+			snprintf(records[count].category, sizeof(records[count].category), "unknown");
+			records[count].quantity = 0;
+			records[count].unit_price = 0;
+			records[count].total_price = 0;
+
+			snprintf(records[count].name, sizeof(records[count].name), "%s", name);
+			snprintf(records[count].category, sizeof(records[count].category), "%s", category);
+			records[count].quantity = quantity;
+			records[count].unit_price = unit_price;
+			records[count].total_price = quantity * unit_price;
+
+			if (strlen(name) > stats->longest_name) {
+				stats->longest_name = strlen(name);
+			}
+
+			stats->grand_total += records[count].total_price;
+
+			if (records[count].total_price > stats->max_total) {
+				stats->max_total = records[count].total_price;
+			}
+
+			count++;
+		}
+		
 	}
 
 	stats->records_loaded = count;
@@ -70,12 +100,52 @@ int build_report(const struct order_record records[], size_t count, const struct
 	   - print the summary line last
 	   - fail if the report buffer is too small
 	*/
-	written = snprintf(out, out_size, "TODO(student): implement build_report for %zu records\n", count);
-	if (written < 0 || (size_t)written >= out_size) {
-		return -1;
+	size_t used;
+	size_t i;
+
+	used = 0;
+
+	written = snprintf(out + used, out_size - used,
+                   "report | rows=%zu | longest=%zu\n",
+                   count, stats->longest_name);
+
+	if (written < 0 || (size_t)written >= out_size - used) {
+    return -1;
 	}
 
+	used += (size_t)written;
+
+	for (i = 0; i < count; i++) {
+    	written = snprintf(out + used, out_size - used,
+                       "%02zu | %-*s | qty=%2d | unit=%3d | total=%3d | cat=%s\n",
+                       i + 1,
+                       (int)stats->longest_name,
+                       records[i].name,
+                       records[i].quantity,
+                       records[i].unit_price,
+                       records[i].total_price,
+                       records[i].category);
+
+    if (written < 0 || (size_t)written >= out_size - used) {
+        return -1;
+    }
+
+    used += (size_t)written;
+}
+
+	written = snprintf(out + used, out_size - used,
+                   "summary | grand_total=%d | max_total=%d | reads=%zu | writes=%zu\n",
+                   stats->grand_total,
+                   stats->max_total,
+                   stats->input_reads,
+                   stats->output_writes);
+
+	if (written < 0 || (size_t)written >= out_size - used) {
+    return -1;
+}
+
 	return 0;
+	
 }
 
 int main(int argc, char **argv) {
